@@ -2,50 +2,50 @@ import { NextResponse } from "next/server";
 import axios from "axios";
 
 export async function POST(req: Request) {
-  try {
-    const { questions, answers, role } = await req.json();
+	try {
+		const { questions, answers, role } = await req.json();
 
-    let score = 0;
-    let total = 0;
+		let score = 0;
+		let total = 0;
 
-    const textQuestions: any[] = [];
+		const textQuestions: any[] = [];
 
-    questions.forEach((q: any, index: number) => {
-      const userAnswer = answers[index];
+		questions.forEach((q: any, index: number) => {
+			const userAnswer = answers[index];
 
-      if (q.type === "mcq") {
-        total += 1;
-        if (userAnswer && q.correct?.includes(userAnswer)) {
-          score += 1;
-        }
-      }
+			if (q.type === "mcq") {
+				total += 1;
+				if (userAnswer && q.correct?.includes(userAnswer)) {
+					score += 1;
+				}
+			}
 
-      else if (q.type === "multi") {
-        total += 1;
+			else if (q.type === "multi") {
+				total += 1;
 
-        const correct = q.correct || [];
-        const user = userAnswer || [];
+				const correct = q.correct || [];
+				const user = userAnswer || [];
 
-        const matchCount = user.filter((u: string) =>
-          correct.includes(u)
-        ).length;
+				const matchCount = user.filter((u: string) =>
+					correct.includes(u)
+				).length;
 
-        score += matchCount / correct.length;
-      }
+				score += matchCount / correct.length;
+			}
 
-      else if (q.type === "text") {
-        textQuestions.push({
-          question: q.question,
-          answer: userAnswer || "",
-        });
-      }
-    });
+			else if (q.type === "text") {
+				textQuestions.push({
+					question: q.question,
+					answer: userAnswer || "",
+				});
+			}
+		});
 
-    // Text evaluation
-    let textScore = 0;
+		// Text evaluation
+		let textScore = 0;
 
-    if (textQuestions.length > 0) {
-      const prompt = `
+		if (textQuestions.length > 0) {
+			const prompt = `
 Evaluate the following answers for a ${role} candidate.
 
 Give score (0–10) for each answer based on:
@@ -62,37 +62,37 @@ Data:
 ${JSON.stringify(textQuestions)}
 `;
 
-      const response = await axios.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: prompt }],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+			const response = await axios.post(
+				"https://api.groq.com/openai/v1/chat/completions",
+				{
+					model: "llama-3.3-70b-versatile",
+					messages: [{ role: "user", content: prompt }],
+				},
+				{
+					headers: {
+						Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+						"Content-Type": "application/json",
+					},
+				}
+			);
 
-      let raw = response.data.choices[0].message.content;
-      raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+			let raw = response.data.choices[0].message.content;
+			raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
 
-      const parsed = JSON.parse(raw);
+			const parsed = JSON.parse(raw);
 
-      textScore =
-        parsed.scores.reduce((a: number, b: number) => a + b, 0) /
-        (parsed.scores.length * 10);
+			textScore =
+				parsed.scores.reduce((a: number, b: number) => a + b, 0) /
+				(parsed.scores.length * 10);
 
-      total += 1;
-      score += textScore;
-    }
+			total += 1;
+			score += textScore;
+		}
 
-    const finalScore = Math.round((score / total) * 100);
+		const finalScore = Math.round((score / total) * 100);
 
-    // 🧠 Skill gap analysis
-    const analysisPrompt = `
+		// 🧠 Skill gap analysis
+		const analysisPrompt = `
 You are an expert recruiter.
 
 Analyze this candidate for role: ${role}
@@ -115,35 +115,89 @@ Return ONLY JSON:
 }
 `;
 
-    const analysisRes = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: analysisPrompt }],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+		const analysisRes = await axios.post(
+			"https://api.groq.com/openai/v1/chat/completions",
+			{
+				model: "llama-3.3-70b-versatile",
+				messages: [{ role: "user", content: analysisPrompt }],
+			},
+			{
+				headers: {
+					Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+					"Content-Type": "application/json",
+				},
+			}
+		);
 
-    let rawAnalysis = analysisRes.data.choices[0].message.content;
-    rawAnalysis = rawAnalysis.replace(/```json/g, "").replace(/```/g, "").trim();
+		let rawAnalysis = analysisRes.data.choices[0].message.content;
+		rawAnalysis = rawAnalysis.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    const analysis = JSON.parse(rawAnalysis);
+		const analysis = JSON.parse(rawAnalysis);
 
-    return NextResponse.json({
-      score: finalScore,
-      ...analysis,
-    });
+		// 🎓 Course recommendation prompt
+		const coursePrompt = `
+You are a career mentor.
 
-  } catch (err: any) {
-    console.error(err.response?.data || err.message);
-    return NextResponse.json(
-      { error: "Evaluation failed" },
-      { status: 500 }
-    );
-  }
+For the following missing skills:
+${analysis.missing_skills.join(", ")}
+
+Suggest 2-3 high-quality learning resources per skill.
+
+STRICT RULES:
+- Do NOT give direct links
+- Provide only search queries
+- Platforms allowed: YouTube, Coursera, Udemy
+- Focus on practical, job-ready courses
+
+Return ONLY JSON:
+
+{
+  "courses": [
+    {
+      "skill": "Excel",
+      "resources": [
+        {
+          "title": "Excel for Beginners",
+          "platform": "YouTube",
+          "search_query": "Excel full course beginner",
+          "hours": 10
+        }
+      ]
+    }
+  ]
+}
+`;
+
+		const courseRes = await axios.post(
+			"https://api.groq.com/openai/v1/chat/completions",
+			{
+				model: "llama-3.3-70b-versatile",
+				messages: [{ role: "user", content: coursePrompt }],
+			},
+			{
+				headers: {
+					Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+					"Content-Type": "application/json",
+				},
+			}
+		);
+
+		let rawCourses = courseRes.data.choices[0].message.content;
+		rawCourses = rawCourses.replace(/```json/g, "").replace(/```/g, "").trim();
+
+		const courseData = JSON.parse(rawCourses);
+
+		return NextResponse.json({
+			score: finalScore,
+			...analysis,
+			courses: courseData.courses,
+		});
+
+	} catch (err: any) {
+		console.error(err.response?.data || err.message);
+		return NextResponse.json(
+			{ error: "Evaluation failed" },
+			{ status: 500 }
+		);
+	}
 }
