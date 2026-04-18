@@ -95,21 +95,12 @@ export default function ResultPage() {
                     target="_blank"
                     className="block text-blue-600 hover:underline text-sm"
                   >
-                    {res.title} ({res.platform}) — {res.hours} hrs
+                    {res.title} ({res.platform})
                   </a>
                 );
               })}
             </div>
           ))}
-        </div>
-
-        <div className="bg-green-50 p-4 rounded-lg text-center">
-          <p className="text-sm text-gray-600">
-            Total Learning Time
-          </p>
-          <p className="text-xl font-bold text-green-600">
-            {totalHours} hours
-          </p>
         </div>
       </div>
     </main>
